@@ -17,17 +17,12 @@ func _ready():
 func _input(event):
 	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 		return
-	if event is InputEventMouseButton and event.button_index == BUTTON_MIDDLE and not event.pressed:
-		_handle_mouse_middle_button_released()
+	#if event is InputEventMouseButton and event.button_index == BUTTON_MIDDLE and not event.pressed:
+	#	_handle_mouse_middle_button_released()
 	if event is InputEventMouseMotion:
 		_handle_mouse_motion(event)
 
-func _handle_mouse_middle_button_released():
-	# Move the camera directly behind the player by setting y axis rotation to 0.
-	# The effect is to keep the camera looking in the same direction.
-	var rotation_degrees = $camera_pivot.rotation_degrees
-	rotation_degrees.y = 0
-	$camera_pivot.rotation_degrees = rotation_degrees
+
 	
 func _handle_mouse_motion(event):
 	# Quaternions representing rotations around horizontal and vertical axis.
@@ -80,18 +75,14 @@ func _process(delta):
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		else:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+			
+	if not Input.is_mouse_button_pressed(BUTTON_MIDDLE):
+		_handle_mouse_middle_button_released()
 
 func _physics_process(delta):
-	var movement_dir = process_input()
-	process_movement(delta, movement_dir)
-	
-func process_input():
 	# Reset input and movement vectors
 	var input_movement := Vector2()
 	var movement_direction := Vector3()
-	
-	if Input.is_action_just_pressed("move_forward"):
-		_handle_player_initial_movement()
 	
 	# Check keyboard input
 	if Input.is_action_pressed("move_forward"):
@@ -104,14 +95,42 @@ func process_input():
 		input_movement.x += 1
 	if Input.is_action_pressed("move_jump") and is_on_floor():
 		velocity.y += jump_acceleration
+		
+	
 	
 	# Update movement_direction vector
 	var self_basis = self.global_transform.basis
 	movement_direction += -self_basis.z.normalized() * input_movement.y
 	movement_direction += self_basis.x.normalized() * input_movement.x
+
+	# Normalize movement direction
+	movement_direction = movement_direction.normalized()
 	
-	return movement_direction
+	# Add effect of gravity
+	velocity.y += gravity * delta
 	
+	# Add effect of walk speed
+	movement_direction *= walk_speed
+	
+	velocity.x = movement_direction.x
+	velocity.z = movement_direction.z
+	velocity = move_and_slide(velocity, Vector3.UP)
+
+func _handle_mouse_middle_button_released():
+	# Move the camera directly behind the player by setting y axis rotation to 0.
+	# The effect is to keep the camera looking in the same direction.	
+	var current_rotation = $camera_pivot.transform.basis.get_rotation_quat()
+	var target_rotation = Quat(Vector3.UP, 0) * Quat(Vector3.RIGHT, $camera_pivot.rotation.x)
+	
+	var rotation = current_rotation.slerp(target_rotation, 0.05)
+	
+	$camera_pivot.transform.basis = Basis(rotation.normalized())
+	
+	# Clamp the camera_pivot's rotation to sane values.
+	# Set z axis to 0 so our camera is always oriented correctly.
+	var camera_rotation = $camera_pivot.rotation_degrees
+	#$camera_pivot.rotation_degrees = Vector3(_clamp_x(camera_rotation.x), _clamp_y(camera_rotation.y), 0)
+
 func _handle_player_initial_movement():
 	# Set the players rotation to the camera's global rotation
 	self.global_transform.basis = $camera_pivot.global_transform.basis
@@ -121,17 +140,3 @@ func _handle_player_initial_movement():
 	
 	# Also move the camera to be behind the player
 	_handle_mouse_middle_button_released()
-
-func process_movement(delta, movement_dir):
-	# Normalize movement direction
-	movement_dir = movement_dir.normalized()
-	
-	# Add effect of gravity
-	velocity.y += gravity * delta
-	
-	# Add effect of walk speed
-	movement_dir *= walk_speed
-	
-	velocity.x = movement_dir.x
-	velocity.z = movement_dir.z
-	velocity = move_and_slide(velocity, Vector3.UP)
